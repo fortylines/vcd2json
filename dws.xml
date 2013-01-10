@@ -1,0 +1,28 @@
+<?xml version="1.0" ?>
+<projects>
+  <project name="libvcd">
+    <title>Value Change Dump Parser</title>
+    <description>
+      Parser for Interactive browsing of Value Change Dump (VCD) files
+    </description>
+    <maintainer>
+	  <personname>Sebastien Mirolo</personname>
+	  <email>smirolo@fortylines.com</email>
+	</maintainer>
+    <repository>
+      <dep name="build-essential">
+		<bin>gcc</bin>
+      </dep>
+      <dep name="git-all">
+		<bin>git</bin>
+      </dep>      
+      <dep name="drop">
+		<bin>dws</bin>
+		<share>(dws)/prefix.mk</share>
+      </dep>
+    </repository>
+    <package name="Ubuntu">
+	  <metainfo name="section">devel</metainfo>
+    </package>
+  </project>
+</projects>
