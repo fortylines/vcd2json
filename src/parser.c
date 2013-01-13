@@ -75,6 +75,9 @@ struct definitions_t {
 
 struct simulation_t {
     change_record initial_change_record;
+    size_t current_timestamp;
+    /* identifier code we are interested in. */
+    const char *id_code;
     size_t start_time;
     size_t end_time;
     size_t resolution;
@@ -97,11 +100,6 @@ struct tokenizer_t {
     vcd_token tok;
     struct parser_t parser;
 };
-
-
-/** XXX Global variables
-*/
-size_t current_timestamp;
 
 
 static void
@@ -131,9 +129,12 @@ init_definitions( struct definitions_t *defs,
 
 static void
 init_simulation( struct simulation_t *sim,
+    const char *id_code,
     size_t start_time, size_t end_time, size_t resolution,
     vcd_print_callback print, void *obj )
 {
+    sim->current_timestamp = 0;
+    sim->id_code = id_code;
     sim->start_time = start_time;
     sim->end_time = end_time;
     sim->resolution = resolution;
@@ -154,8 +155,9 @@ set_identifier_code( struct parser_t *parser,
 
 static void
 set_value_change( struct change_record_t *record,
-    const char *buffer, size_t start, size_t last )
+    size_t timestamp, const char *buffer, size_t start, size_t last )
 {
+    record->timestamp = timestamp;
     record->length = last - start;
     assert( record->length < sizeof(record->value_change) - 1);
     strncpy(record->value_change, &buffer[start], record->length);
@@ -312,34 +314,36 @@ print_value_change( struct simulation_t *sim,
     const char *buffer, size_t start, size_t last, size_t mark )
 {
     /* Is this the variable we are looking for? */
-    /* XXX Don't forget to implement! */
-    if( buffer[mark] != '!' ) return;
+    if( strncmp(&buffer[mark], sim->id_code, last - mark) != 0 ) return;
 
     /* At this point we have a filtered variable.
        -----------------------------------> time
        ^              ^              ^
        change_record  enter_period   current_time
     */
-    if( sim->start_time <= current_timestamp
-        & current_timestamp < sim->end_time  ) {
+    if( sim->start_time <= sim->current_timestamp
+        & sim->current_timestamp < sim->end_time  ) {
         if( sim->not_first_record ) {
             sim->print(sim->obj, ",\n", 2);
         } else {
-            if( sim->start_time < current_timestamp ) {
+            if( sim->start_time < sim->current_timestamp ) {
                 print_timestamp_and_value(sim,
                     sim->initial_change_record.timestamp,
                     sim->initial_change_record.value_change,
                     sim->initial_change_record.length);
+                /* We are going to print two records back-to-back here. */
+                sim->print(sim->obj, ",\n", 2);
             }
         }
         /* No need to buffer here. */
         print_timestamp_and_value(sim,
-            current_timestamp,
+            sim->current_timestamp,
             &buffer[start], mark - start);
         sim->not_first_record = true;
 
     } else {
-        set_value_change(&sim->initial_change_record, buffer, start, last);
+        set_value_change(&sim->initial_change_record,
+            sim->current_timestamp, buffer, start, mark);
     }
 }
 
@@ -376,7 +380,9 @@ value_change_dump_definitions:
         if( parser->defs ) print_exit_scope(parser->defs);
         advance(end_keyword);
     case sim_time_vcd_token:
-        current_timestamp = as_timestamp(buffer, start, last);
+        if( parser->sim ) {
+            parser->sim->current_timestamp = as_timestamp(buffer, start, last);
+        }
         /* We encountered a simulation time at the top level,
            we are definitely done with the declaration commands. */
         advance(value_change_dump_definitions);
@@ -1074,7 +1080,13 @@ void value_changes( FILE *from,
     size_t bytes_read = 1;
     char buffer[BUFFER_SIZE];
 
-    init_simulation(&sim, start_time, end_time, resolution, print, obj);
+#ifdef LOGENABLE
+    fprintf(stderr, "values for %s in [%ld, %ld[ with resolution %ld\n",
+        id_code, start_time, end_time, resolution);
+#endif
+
+    init_simulation(&sim, id_code, start_time, end_time, resolution,
+        print, obj);
     init_tokenizer(&tokenizer, NULL, &sim);
 
     /* XXX seek to first reference as described in toc. */
@@ -1082,14 +1094,14 @@ void value_changes( FILE *from,
 
     sim.print(sim.obj, "{\n", 2);
     print_identifier_code(id_code, sim.print, sim.obj);
-    sim.print(sim.obj, ": {\n", 4);
+    sim.print(sim.obj, ": [\n", 4);
     while( bytes_read > 0 ) {
         bytes_read = fread(buffer, 1, BUFFER_SIZE, from);
         if( tokenize_header_and_definitions(&tokenizer, buffer, bytes_read) != bytes_read ){
             break;
         }
     }
-    sim.print(sim.obj, "\n}\n}\n", 5);
+    sim.print(sim.obj, "\n]\n}\n", 5);
 
     fseek(from, prevpos, SEEK_SET);
 }
