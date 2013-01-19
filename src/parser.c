@@ -313,8 +313,13 @@ static void
 print_value_change( struct simulation_t *sim,
     const char *buffer, size_t start, size_t last, size_t mark )
 {
-    /* Is this the variable we are looking for? */
-    if( strncmp(&buffer[mark], sim->id_code, last - mark) != 0 ) return;
+    /* Is this the variable we are looking for?
+       We use the length of the id_code instead of (last - mark)
+       since mark indicates the end of the value and there is a space
+       delimiter between the value and symbol name for bit vector changes. */
+    int id_code_length = strlen(sim->id_code);
+    if( strncmp(&buffer[last - id_code_length],
+            sim->id_code, id_code_length) != 0 ) return;
 
     /* At this point we have a filtered variable.
        -----------------------------------> time
