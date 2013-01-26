@@ -37,12 +37,6 @@ libvcd$(dylSuffix): parser.o
 
 parser.o: parser.c
 
-dist-rpm: $(project)-$(version).tar.bz2 \
-			$(wildcard $(srcDir)/src/$(project)-*.patch)
-	$(installDirs) $(HOME)/rpmbuild/SOURCES
-	$(installFiles) $(filter %.tar.bz2 %.patch, $^) $(HOME)/rpmbuild/SOURCES
-	rpmbuild -bb $(srcDir)/libvcd.spec
-
 include $(buildTop)/share/dws/suffix.mk
 
 # NOTE: This needs to be executed after installing libvcd.so since
