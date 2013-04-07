@@ -66,14 +66,18 @@ wrapper_definitions( PyObject *self, PyObject *args )
 
     FILE *fp = PyFile_AsFile((PyObject*)read_file_descr);
     PyFile_IncUseCount(read_file_descr);
+#if 0
     Py_BEGIN_ALLOW_THREADS;
-
+#endif
     header_and_definitions(fp, write_string_stream_append, &write_stream);
-
+#if 0
     Py_END_ALLOW_THREADS;
+#endif
     PyFile_DecUseCount(read_file_descr);
 
-    return write_stream.buffer;
+    if( write_stream.buffer )
+        return write_stream.buffer;
+    return PyString_FromString("{}");
 }
 
 static PyObject*
@@ -94,8 +98,9 @@ wrapper_values( PyObject *self, PyObject *args )
 
     FILE *fp = PyFile_AsFile((PyObject*)read_file_descr);
     PyFile_IncUseCount(read_file_descr);
+#if 0
     Py_BEGIN_ALLOW_THREADS;
-
+#endif
     for( i = 0; i < PyList_Size(variables); ++i ) {
         PyObject *item = PyList_GetItem(variables, 0);
         char *name = PyString_AsString(item);
@@ -104,8 +109,9 @@ wrapper_values( PyObject *self, PyObject *args )
                 write_string_stream_append, &write_stream);
         }
     }
-
+#if 0
     Py_END_ALLOW_THREADS;
+#endif
     PyFile_DecUseCount(read_file_descr);
 
     if( write_stream.buffer )

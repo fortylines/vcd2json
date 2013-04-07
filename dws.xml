@@ -10,9 +10,6 @@
 	  <email>smirolo@fortylines.com</email>
 	</maintainer>
     <repository>
-      <dep name="build-essential">
-		<bin>gcc</bin>
-      </dep>
       <dep name="git-all">
 		<bin>git</bin>
       </dep>      
@@ -20,6 +17,18 @@
 		<bin>dws</bin>
 		<share>(dws)/prefix.mk</share>
       </dep>
+	  <alternates>
+		<alternate name="Fedora">
+		  <dep name="gcc">
+            <bin>gcc</bin>
+		  </dep>
+		</alternate>
+		<alternate name="Ubuntu">
+		  <dep name="build-essential">
+			<bin>gcc</bin>
+		  </dep>
+		</alternate>
+      </alternates>
     </repository>
     <package name="Ubuntu">
 	  <metainfo name="section">devel</metainfo>
