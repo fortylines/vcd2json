@@ -393,10 +393,15 @@ value_change_dump_definitions:
         advance(value_change_dump_definitions);
 
     case value_change_bit_vcd_token:
-    case value_change_binary_vcd_token:
-    case value_change_real_vcd_token:
         if( parser->sim ) {
             print_value_change(parser->sim, buffer, start, last, mark);
+        }
+        advance(value_change_dump_definitions);
+    case value_change_binary_vcd_token:
+    case value_change_real_vcd_token:
+        /* Remove the leading 'b', 'B', 'r' or 'R' */
+        if( parser->sim ) {
+            print_value_change(parser->sim, buffer, start + 1, last, mark);
         }
         advance(value_change_dump_definitions);
     case dumpvars_vcd_token:
@@ -504,10 +509,15 @@ dumpall_variables:
     if( token == whitespace_vcd_token ) advance(dumpall_variables);
     switch( token ) {
     case value_change_bit_vcd_token:
-    case value_change_binary_vcd_token:
-    case value_change_real_vcd_token:
         if( parser->sim ) {
             print_value_change(parser->sim, buffer, start, last, mark);
+        }
+        advance(dumpall_variables);
+    case value_change_binary_vcd_token:
+    case value_change_real_vcd_token:
+        /* Remove the leading 'b', 'B', 'r' or 'R' */
+        if( parser->sim ) {
+            print_value_change(parser->sim, buffer, start + 1, last, mark);
         }
         advance(dumpall_variables);
     case end_vcd_token:
