@@ -6,32 +6,32 @@
       Parser for Interactive browsing of Value Change Dump (VCD) files
     </description>
     <maintainer>
-	  <personname>Sebastien Mirolo</personname>
-	  <email>smirolo@fortylines.com</email>
-	</maintainer>
+      <personname>Sebastien Mirolo</personname>
+      <email>smirolo@fortylines.com</email>
+    </maintainer>
     <repository>
       <dep name="git-all">
-		<bin>git</bin>
-      </dep>      
-      <dep name="drop">
-		<bin>dws</bin>
-		<share>(dws)/prefix.mk</share>
+        <bin>git</bin>
       </dep>
-	  <alternates>
-		<alternate name="Fedora">
-		  <dep name="gcc">
+      <dep name="drop">
+        <bin>dws</bin>
+        <share>(dws)/prefix.mk</share>
+      </dep>
+      <alternates>
+        <alternate name="Fedora">
+          <dep name="gcc">
             <bin>gcc</bin>
-		  </dep>
-		</alternate>
-		<alternate name="Ubuntu">
-		  <dep name="build-essential">
-			<bin>gcc</bin>
-		  </dep>
-		</alternate>
+          </dep>
+        </alternate>
+        <alternate name="Ubuntu">
+          <dep name="build-essential">
+            <bin>gcc</bin>
+          </dep>
+        </alternate>
       </alternates>
     </repository>
     <package name="Ubuntu">
-	  <metainfo name="section">devel</metainfo>
+      <metainfo name="section">devel</metainfo>
     </package>
   </project>
 </projects>

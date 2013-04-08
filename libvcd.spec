@@ -2,7 +2,7 @@
 
 Summary: Library to extract information from Value Change Dump files
 Name: libvcd
-Version: 0.1
+Version: 0.1.1
 Release: 0
 License: BSD
 Group: Development/Libraries
