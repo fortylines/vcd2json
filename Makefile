@@ -25,13 +25,13 @@
 
 include $(shell dws context)
 
-version	:= 0.1
+version := 0.1.1
 
 include $(buildTop)/share/dws/prefix.mk
 
-dynlibs	:=  libvcd$(dylSuffix)
+dynlibs :=  libvcd$(dylSuffix)
 
-CFLAGS		+= -std=c99 -g
+CFLAGS  += -std=c99 -g
 
 libvcd$(dylSuffix): parser.o
 
