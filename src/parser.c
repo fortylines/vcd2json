@@ -1,35 +1,33 @@
-/* Copyright (c) 2012-2013, Fortylines LLC
+/* Copyright (c) 2012-2014, Fortylines LLC
    All rights reserved.
 
    Redistribution and use in source and binary forms, with or without
    modification, are permitted provided that the following conditions are met:
-     * Redistributions of source code must retain the above copyright
-       notice, this list of conditions and the following disclaimer.
-     * Redistributions in binary form must reproduce the above copyright
-       notice, this list of conditions and the following disclaimer in the
-       documentation and/or other materials provided with the distribution.
-     * Neither the name of fortylines nor the
-       names of its contributors may be used to endorse or promote products
-       derived from this software without specific prior written permission.
 
-   THIS SOFTWARE IS PROVIDED BY Fortylines LLC ''AS IS'' AND ANY
-   EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-   WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-   DISCLAIMED. IN NO EVENT SHALL Fortylines LLC BE LIABLE FOR ANY
-   DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
-   (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
-   LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
-   ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-   (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-   SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE. */
+   1. Redistributions of source code must retain the above copyright notice,
+      this list of conditions and the following disclaimer.
+   2. Redistributions in binary form must reproduce the above copyright
+      notice, this list of conditions and the following disclaimer in the
+      documentation and/or other materials provided with the distribution.
+
+   THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+   "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
+   TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+   PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR
+   CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+   EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+   PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
+   OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+   OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+   ADVISED OF THE POSSIBILITY OF SUCH DAMAGE. */
 
 #include <assert.h>
 #include <ctype.h>
-#include <stdbool.h>
 #include <string.h>
 #include "libvcd.h"
 
-#define BUFFER_SIZE    4096
+#define NAMESPACE_SEP        '/'
 
 typedef enum {
     err_vcd_token = 0,
@@ -57,33 +55,24 @@ typedef enum {
     value_change_real_vcd_token
 } vcd_token;
 
-typedef struct change_record_t {
-    size_t timestamp;
-    size_t length;
-    char value_change[BUFFER_SIZE];
-} change_record;
-
 
 struct definitions_t {
+    signal_map *map;
     bool enter_scope;
     bool enter_field;
-    int scope_depth;
     vcd_print_callback print;
     void *obj;
+    int scope_depth;
+    char scope_prefix[FILENAME_MAX];
 };
 
 
 struct simulation_t {
-    change_record initial_change_record;
+    const signal_map *map;    /* identifier codes we are interested in. */
     size_t current_timestamp;
-    /* identifier code we are interested in. */
-    const char *id_code;
-    size_t start_time;
-    size_t end_time;
+    size_t start_time;         /* [start_time, end_time[ period we are   */
+    size_t end_time;           /* interested in. */
     size_t resolution;
-    bool not_first_record;
-    vcd_print_callback print;
-    void *obj;
 };
 
 
@@ -102,6 +91,37 @@ struct tokenizer_t {
 };
 
 
+static int
+append_to_prefix( char *scope_prefix, const char *src, size_t len )
+{
+    if( len > 0 ) {
+        size_t s1_len = strlen(scope_prefix);
+        if( s1_len + 2 + len >= FILENAME_MAX ) {
+            fprintf(stderr,
+                "error: symbol name is more than %d characters, too long!",
+                FILENAME_MAX);
+            return 1;
+        }
+        if( s1_len > 0 && src[0] != '[' ) {
+            scope_prefix[s1_len++] = NAMESPACE_SEP;
+        }
+        memcpy(&scope_prefix[s1_len], src, len);
+        scope_prefix[s1_len + len] = '\0';
+    }
+    return 0;
+}
+
+static void
+remove_last_prefix( char *scope_prefix ) {
+    char *end_ptr = strrchr(scope_prefix, NAMESPACE_SEP);
+    if( end_ptr ) {
+        *end_ptr = '\0';
+    } else {
+        scope_prefix[0] = '\0';
+    }
+}
+
+
 static void
 init_tokenizer( struct tokenizer_t *tokenizer,
     struct definitions_t *defs, struct simulation_t *sim )
@@ -117,30 +137,27 @@ init_tokenizer( struct tokenizer_t *tokenizer,
 
 static void
 init_definitions( struct definitions_t *defs,
-    vcd_print_callback print, void *obj )
+    signal_map *map, vcd_print_callback print, void *obj )
 {
     defs->enter_scope = true;
     defs->enter_field = true;
     defs->scope_depth = 0;
+    defs->map = map;
     defs->print = print;
     defs->obj = obj;
+    memset(defs->scope_prefix, 0, FILENAME_MAX);
 }
 
 
 static void
-init_simulation( struct simulation_t *sim,
-    const char *id_code,
-    size_t start_time, size_t end_time, size_t resolution,
-    vcd_print_callback print, void *obj )
+init_simulation( struct simulation_t *sim, const signal_map *map,
+    size_t start_time, size_t end_time, size_t resolution )
 {
     sim->current_timestamp = 0;
-    sim->id_code = id_code;
+    sim->map = map;
     sim->start_time = start_time;
     sim->end_time = end_time;
     sim->resolution = resolution;
-    sim->not_first_record = false;
-    sim->print = print;
-    sim->obj = obj;
 }
 
 static void
@@ -154,14 +171,17 @@ set_identifier_code( struct parser_t *parser,
 }
 
 static void
-set_value_change( struct change_record_t *record,
+set_value_change( signal_buf *timeline,
     size_t timestamp, const char *buffer, size_t start, size_t last )
 {
-    record->timestamp = timestamp;
-    record->length = last - start;
-    assert( record->length < sizeof(record->value_change) - 1);
-    strncpy(record->value_change, &buffer[start], record->length);
-    record->value_change[record->length] = '\0';
+    timeline->initial_change_record_timestamp = timestamp;
+    timeline->initial_change_record_length = last - start;
+    assert( timeline->initial_change_record_length
+        < sizeof(timeline->initial_change_record_value_change) - 1);
+    strncpy(timeline->initial_change_record_value_change,
+        &buffer[start], timeline->initial_change_record_length);
+    timeline->initial_change_record_value_change[
+        timeline->initial_change_record_length] = '\0';
 }
 
 
@@ -179,14 +199,17 @@ as_timestamp( const char *buffer, size_t start, size_t last )
 
 
 static void
-print_timestamp_and_value( struct simulation_t *sim,
+print_timestamp_and_value( signal_buf *timeline,
     size_t timestamp, const char *value_change, size_t length )
 {
-    char timestamp_str[128];
-    sprintf(timestamp_str, "[%zd, \"", timestamp);
-    sim->print(sim->obj, timestamp_str, strlen(timestamp_str));
-    sim->print(sim->obj, value_change, length);
-    sim->print(sim->obj, "\"]", 2);
+    // XXX Inefficient code here!
+    size_t len = strlen(timeline->text);
+    snprintf(&timeline->text[len], BUFFER_SIZE - len, "[%zd, \"", timestamp);
+    len = strlen(timeline->text);
+    if( !(length > BUFFER_SIZE - len) ) {
+        memcpy(&timeline->text[len], value_change, length);
+    }
+    strncat(timeline->text, "\"]", BUFFER_SIZE);
 }
 
 
@@ -200,7 +223,7 @@ static bool is_data_token( vcd_token tok ) {
 }
 
 static void
-print_identifier_code( const char *ident,
+escape_identifier_code( const char *ident,
     vcd_print_callback print, void *obj )
 {
     const char *p = ident;
@@ -218,6 +241,20 @@ print_identifier_code( const char *ident,
 
 
 static void
+print_identifier_code( struct definitions_t *defs, const char *ident )
+{
+    insert_short_key(defs->map, defs->scope_prefix, ident);
+    escape_identifier_code(ident, defs->print, defs->obj);
+    remove_last_prefix(defs->scope_prefix);
+}
+
+
+/** Meta information like "date", "version", "timescale", etc.
+
+    $score, ie. variable definitions, are handled separately through
+    print_enter_scope, print_exit_scope, print_enter_var, print_exit_var.
+ */
+static void
 print_field_name( struct definitions_t *defs,
     const char *buffer, size_t start, size_t last )
 {
@@ -232,6 +269,8 @@ print_field_name( struct definitions_t *defs,
 }
 
 
+/** Value of meta information like "date", "version", "timescale", etc.
+ */
 static void
 print_field_value( struct definitions_t *defs,
     const char *buffer, size_t start, size_t last )
@@ -267,18 +306,23 @@ print_enter_scope( struct definitions_t *defs,
     }
     for( int i = 0; i < defs->scope_depth; ++i )
         defs->print(defs->obj, "\t", 1);
+
+    append_to_prefix(defs->scope_prefix, &buffer[start], last - start);
+    ++defs->scope_depth;
+
     defs->print(defs->obj, "\"", 1);
     defs->print(defs->obj, &buffer[start], last - start);
     defs->print(defs->obj, "\": {\n", 5);
-    ++defs->scope_depth;
 }
 
 
 static void
 print_exit_scope( struct definitions_t *defs )
 {
-    defs->print(defs->obj, "\n", 1);
     --defs->scope_depth;
+    remove_last_prefix(defs->scope_prefix);
+
+    defs->print(defs->obj, "\n", 1);
     for( int i = 0; i < defs->scope_depth; ++i )
         defs->print(defs->obj, "\t", 1);
     defs->print(defs->obj, "}", 1);
@@ -297,6 +341,7 @@ print_enter_var( struct definitions_t *defs,
         defs->print(defs->obj, "\t", 1);
     defs->print(defs->obj, "\"", 1);
     defs->print(defs->obj, &buffer[start], last - start);
+    append_to_prefix(defs->scope_prefix, &buffer[start], last - start);
 }
 
 
@@ -304,6 +349,8 @@ static void
 print_exit_var( struct definitions_t *defs,
     const char *buffer, size_t start, size_t last )
 {
+    /* [low:high] vector suffix */
+    append_to_prefix(defs->scope_prefix, &buffer[start], last - start);
     defs->print(defs->obj, &buffer[start], last - start);
     defs->print(defs->obj, "\": ", 3);
 }
@@ -313,13 +360,14 @@ static void
 print_value_change( struct simulation_t *sim,
     const char *buffer, size_t start, size_t last, size_t mark )
 {
-    /* Is this the variable we are looking for?
-       We use the length of the id_code instead of (last - mark)
-       since mark indicates the end of the value and there is a space
+    /* mark indicates the end of the value and there is a space
        delimiter between the value and symbol name for bit vector changes. */
-    int id_code_length = strlen(sim->id_code);
-    if( strncmp(&buffer[last - id_code_length],
-            sim->id_code, id_code_length) != 0 ) return;
+    size_t len = last - mark;
+    if( buffer[mark] == ' ' ) --len;
+    assert( len > 0 );
+    signal_buf *timeline = find_timeline(
+        sim->map, &buffer[last - len], len);
+    if( !timeline ) return;
 
     /* At this point we have a filtered variable.
        -----------------------------------> time
@@ -328,26 +376,27 @@ print_value_change( struct simulation_t *sim,
     */
     if( sim->start_time <= sim->current_timestamp
         & sim->current_timestamp < sim->end_time  ) {
-        if( sim->not_first_record ) {
-            sim->print(sim->obj, ",\n", 2);
+        if( timeline->not_first_record ) {
+            // XXX Inefficient
+            strncat(timeline->text, ",\n", BUFFER_SIZE);
         } else {
             if( sim->start_time < sim->current_timestamp ) {
-                print_timestamp_and_value(sim,
-                    sim->initial_change_record.timestamp,
-                    sim->initial_change_record.value_change,
-                    sim->initial_change_record.length);
+                print_timestamp_and_value(timeline,
+                    timeline->initial_change_record_timestamp,
+                    timeline->initial_change_record_value_change,
+                    timeline->initial_change_record_length);
                 /* We are going to print two records back-to-back here. */
-                sim->print(sim->obj, ",\n", 2);
+                // XXX Inefficient
+                strncat(timeline->text, ",\n", BUFFER_SIZE);
             }
         }
         /* No need to buffer here. */
-        print_timestamp_and_value(sim,
-            sim->current_timestamp,
-            &buffer[start], mark - start);
-        sim->not_first_record = true;
+        print_timestamp_and_value(timeline,
+            sim->current_timestamp, &buffer[start], mark - start);
+        timeline->not_first_record = true;
 
     } else {
-        set_value_change(&sim->initial_change_record,
+        set_value_change(timeline,
             sim->current_timestamp, buffer, start, mark);
     }
 }
@@ -410,6 +459,9 @@ value_change_dump_definitions:
         /* We are sure to find a reference for the variable in this section,
            let's fetch it as initial value for the time period. */
         advance(dumpall_variables);
+    default:
+        /* to shut-off gcc -Wswitch warning */
+        break;
     }
     goto error;
 
@@ -483,16 +535,14 @@ var_var_reference_slice:
     if( token == end_vcd_token ) {
         if( parser->defs ) {
             print_exit_var(parser->defs, "", 0, 0);
-            print_identifier_code(parser->identifier_code,
-                parser->defs->print, parser->defs->obj);
+            print_identifier_code(parser->defs, parser->identifier_code);
         }
         advance(value_change_dump_definitions);
     }
     if( token == data_vcd_token ) {
         if( parser->defs ) {
             print_exit_var(parser->defs, buffer, start, last);
-            print_identifier_code(parser->identifier_code,
-                parser->defs->print, parser->defs->obj);
+            print_identifier_code(parser->defs, parser->identifier_code);
         }
         advance(end_keyword);
     }
@@ -522,6 +572,9 @@ dumpall_variables:
         advance(dumpall_variables);
     case end_vcd_token:
         advance(value_change_dump_definitions);
+    default:
+        /* to shut-off gcc -Wswitch warning */
+        break;
     }
     goto error;
 
@@ -1058,65 +1111,86 @@ vector_real_value_identifier:
 }
 
 
-void header_and_definitions( FILE *from,
+void header_and_definitions( FILE *from, signal_map *map,
     vcd_print_callback print, void *obj )
 {
     struct definitions_t defs;
     struct tokenizer_t tokenizer;
-    long prevpos = ftell(from);
     size_t bytes_read = 1;
     char buffer[BUFFER_SIZE];
 
-    init_definitions(&defs, print, obj);
+    init_definitions(&defs, map, print, obj);
     init_tokenizer(&tokenizer, &defs, NULL);
-    fseek(from, 0, SEEK_SET);
 
     defs.print(defs.obj, "{\n", 2);
     while( bytes_read > 0 ) {
         bytes_read = fread(buffer, 1, BUFFER_SIZE, from);
-        if( tokenize_header_and_definitions(&tokenizer, buffer, bytes_read) != bytes_read ){
+        if( tokenize_header_and_definitions(&tokenizer, buffer, bytes_read)
+            != bytes_read ){
             break;
         }
     }
     defs.print(defs.obj, "\n}\n", 3);
-
-    fseek(from, prevpos, SEEK_SET);
 }
 
 
-void value_changes( FILE *from,
-    const char *id_code, size_t start_time, size_t end_time,
-    size_t resolution,
-    vcd_print_callback print, void *obj )
+void value_changes( FILE *from, const signal_map *map,
+    size_t start_time, size_t end_time, size_t resolution )
 {
     struct simulation_t sim;
     struct tokenizer_t tokenizer;
-    long prevpos = ftell(from);
     size_t bytes_read = 1;
     char buffer[BUFFER_SIZE];
 
-#ifdef LOGENABLE
-    fprintf(stderr, "values for %s in [%ld, %ld[ with resolution %ld\n",
-        id_code, start_time, end_time, resolution);
-#endif
-
-    init_simulation(&sim, id_code, start_time, end_time, resolution,
-        print, obj);
+    init_simulation(&sim, map, start_time, end_time, resolution);
     init_tokenizer(&tokenizer, NULL, &sim);
 
     /* XXX seek to first reference as described in toc. */
-    fseek(from, 0, SEEK_SET);
 
-    sim.print(sim.obj, "{\n", 2);
-    print_identifier_code(id_code, sim.print, sim.obj);
-    sim.print(sim.obj, ": [\n", 4);
     while( bytes_read > 0 ) {
         bytes_read = fread(buffer, 1, BUFFER_SIZE, from);
-        if( tokenize_header_and_definitions(&tokenizer, buffer, bytes_read) != bytes_read ){
+        if( tokenize_header_and_definitions(&tokenizer, buffer, bytes_read)
+            != bytes_read ){
             break;
         }
     }
-    sim.print(sim.obj, "\n]\n}\n", 5);
+}
 
-    fseek(from, prevpos, SEEK_SET);
+
+void filter_value_changes( FILE *from, signal_map *map,
+    size_t start_time, size_t end_time, size_t resolution,
+    vcd_print_callback print, void *obj )
+{
+    signal_buf *curr = NULL;
+    struct definitions_t defs;
+    struct simulation_t sim;
+    struct tokenizer_t tokenizer;
+    size_t bytes_read = 1;
+    char buffer[BUFFER_SIZE];
+
+    init_definitions(&defs, map, print, obj);
+    init_simulation(&sim, map, start_time, end_time, resolution);
+    init_tokenizer(&tokenizer, &defs, &sim);
+
+    print(obj, "{\n", 2);
+
+    while( bytes_read > 0 ) {
+        bytes_read = fread(buffer, 1, BUFFER_SIZE, from);
+        if( tokenize_header_and_definitions(&tokenizer, buffer, bytes_read)
+            != bytes_read ){
+            break;
+        }
+    }
+
+    curr = map->head;
+    while( curr ) {
+        /* Always append comma. First one is to close header information. */
+        print(obj, ",\n\"", 3);
+        print(obj, curr->name, strlen(curr->name));
+        print(obj, "\": [\n", 5);
+        print(obj, curr->text, strlen(curr->text));
+        print(obj, "\n]", 2);
+        curr = curr->next;
+    }
+    print(obj, "}\n", 2);
 }

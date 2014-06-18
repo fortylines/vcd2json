@@ -1,47 +1,76 @@
-# Copyright (c) 2012-2013, Fortylines LLC
-#   All rights reserved.
+# Copyright (c) 2012-2014, Fortylines LLC
+# All rights reserved.
 #
-#   Redistribution and use in source and binary forms, with or without
-#   modification, are permitted provided that the following conditions are met:
-#     * Redistributions of source code must retain the above copyright
-#       notice, this list of conditions and the following disclaimer.
-#     * Redistributions in binary form must reproduce the above copyright
-#       notice, this list of conditions and the following disclaimer in the
-#       documentation and/or other materials provided with the distribution.
-#     * Neither the name of fortylines nor the
-#       names of its contributors may be used to endorse or promote products
-#       derived from this software without specific prior written permission.
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions are met:
 #
-#   THIS SOFTWARE IS PROVIDED BY Fortylines LLC ''AS IS'' AND ANY
-#   EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-#   WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-#   DISCLAIMED. IN NO EVENT SHALL Fortylines LLC BE LIABLE FOR ANY
-#   DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
-#   (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
-#   LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
-#   ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-#  (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-#   SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+# 1. Redistributions of source code must retain the above copyright notice,
+#    this list of conditions and the following disclaimer.
+# 2. Redistributions in binary form must reproduce the above copyright
+#    notice, this list of conditions and the following disclaimer in the
+#    documentation and/or other materials provided with the distribution.
+#
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+# "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
+# TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+# PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR
+# CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+# EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+# PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
+# OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+# WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+# OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+# ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-include $(shell dws context)
+installTop := /usr/local
+binDir     := $(installTop)/bin
+includeDir := $(installTop)/include
+libDir     := $(installTop)/lib
 
-version := 0.1.1
+srcDir     := .
 
-include $(buildTop)/share/dws/prefix.mk
+-include $(shell dws context)
 
-dynlibs :=  libvcd$(dylSuffix)
+version    := $(shell python $(srcDir)/src/setup.py --version)
 
-CFLAGS  += -std=c99 -g
+bins       := vcd2json
+dynlibs    := libvcd$(dylSuffix)
 
-libvcd$(dylSuffix): parser.o
+CPPFLAGS   += -I$(srcDir)/include -D__VCD2JSON_VERSION__=\"$(version)\"
+CFLAGS     += -std=c99 -g
+LDFLAGS    += -L.
+LDLIBS     := -lvcd
 
-parser.o: parser.c
+vpath %.c $(srcDir)/src
 
-include $(buildTop)/share/dws/suffix.mk
+ifneq ($(filter Darwin,$(shell uname)),)
+dylSuffix       := .dylib
+SHAREDLIBFLAGS  := -dynamiclib
+else
+dylSuffix       := .so
+SHAREDLIBFLAGS  = -pthread -shared -Wl,-soname,$@
+endif
 
-# NOTE: This needs to be executed after installing libvcd.so since
+all: vcd2json libvcd$(dylSuffix)
+
+# NOTE: The python lib needs to be installed after libvcd.so since
 # we use LD_LIBRARY_PATH to find that library in setup.py.
 # XXX Does not work when running rpmbuild and lib is BUILDROOT/.../usr/lib64
-install::
+install: vcd2json libvcd$(dylSuffix)
+	install -d $(DESTDIR)$(binDir)
+	install -s -p -m 755 vcd2json $(DESTDIR)$(binDir)
+	install -d $(DESTDIR)$(includeDir)
+	sed -e 's/#define __VCD2JSON_VERSION__ "(.*)"/#define __VCD2JSON_VERSION__ "$(version)"/' $(srcDir)/include/libvcd.h > $(includeDir)/libvcd.h
+	install -d $(DESTDIR)$(libDir)
+	install -p -m 755 libvcd$(dylSuffix) $(DESTDIR)$(libDir)
 	cd $(srcDir)/src && python setup.py build -b $(CURDIR)/build \
             install --prefix=$(DESTDIR)$(installTop)
+
+vcd2json: vcd2json.c libvcd$(dylSuffix)
+	$(LINK.c) $(filter-out %.h %.hh %.hpp %.ipp %.tcc %.def %$(dylSuffix),$^) $(LOADLIBES) $(LDLIBS) -o $@
+
+libvcd$(dylSuffix): parser.o buf.o
+	$(LINK.o) $(SHAREDLIBFLAGS) $(filter-out %.h %.hh %.hpp %.ipp %.tcc %.def,$^) -o $@
+
+clean:
+	rm -rf vcd2json libvcd$(dylSuffix) *.o *.d *~  *.dSYM $(CURDIR)/build

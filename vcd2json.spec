@@ -1,13 +1,13 @@
 %define python_sitearch %(%{__python} -c "from distutils.sysconfig import get_python_lib; print get_python_lib(1)")
 
 Summary: Library to extract information from Value Change Dump files
-Name: libvcd
+Name: vcd2json
 Version: 0.1.1
 Release: 0
 License: BSD
 Group: Development/Libraries
 URL: http://fortylines.com/
-Source: http://fortylines.com/resources/srcs/libvcd-%{version}.tar.bz2
+Source: http://fortylines.com/resources/srcs/vcd2json-%{version}.tar.bz2
 Packager: Sebastien Mirolo <smirolo@fortylines.com>
 
 %description
