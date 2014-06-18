@@ -22,22 +22,25 @@
 # OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-installTop := /usr/local
-binDir     := $(installTop)/bin
-includeDir := $(installTop)/include
-libDir     := $(installTop)/lib
+-include $(buildTop)/share/dws/prefix.mk
 
-srcDir     := .
+srcDir        ?= .
+installTop    ?= $(VIRTUAL_ENV)
+binDir        ?= $(installTop)/bin
+includeDir    ?= $(installTop)/include
+libDir        ?= $(installTop)/lib
 
-version    := $(shell python $(srcDir)/src/setup.py --version)
+PYTHON        := $(binDir)/python
 
-bins       := vcd2json
-dynlibs    := libvcd$(dylSuffix)
+version       := $(shell $(PYTHON) $(srcDir)/src/setup.py --version)
 
-CPPFLAGS   += -I$(srcDir)/include -D__VCD2JSON_VERSION__=\"$(version)\"
-CFLAGS     += -std=c99 -g
-LDFLAGS    += -L.
-LDLIBS     := -lvcd
+bins          := vcd2json
+dynlibs       := libvcd$(dylSuffix)
+
+CPPFLAGS      += -I$(srcDir)/include -D__VCD2JSON_VERSION__=\"$(version)\"
+CFLAGS        += -std=c99 -g
+LDFLAGS       += -L.
+LDLIBS        := -lvcd
 
 vpath %.c $(srcDir)/src
 
@@ -61,7 +64,7 @@ install: vcd2json libvcd$(dylSuffix)
 	sed -e 's/#define __VCD2JSON_VERSION__ "(.*)"/#define __VCD2JSON_VERSION__ "$(version)"/' $(srcDir)/include/libvcd.h > $(includeDir)/libvcd.h
 	install -d $(DESTDIR)$(libDir)
 	install -p -m 755 libvcd$(dylSuffix) $(DESTDIR)$(libDir)
-	cd $(srcDir)/src && python setup.py build -b $(CURDIR)/build \
+	cd $(srcDir)/src && $(PYTHON) setup.py build -b $(CURDIR)/build \
             install --prefix=$(DESTDIR)$(installTop)
 
 vcd2json: vcd2json.c libvcd$(dylSuffix)
