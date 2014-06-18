@@ -29,8 +29,6 @@ libDir     := $(installTop)/lib
 
 srcDir     := .
 
--include $(shell dws context)
-
 version    := $(shell python $(srcDir)/src/setup.py --version)
 
 bins       := vcd2json
