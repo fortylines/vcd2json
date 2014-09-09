@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2014, Fortylines LLC
+/* Copyright (c) 2014, Fortylines LLC
    All rights reserved.
 
    Redistribution and use in source and binary forms, with or without
@@ -77,16 +77,20 @@ struct simulation_t {
 
 
 struct parser_t {
-    void *state;
     char identifier_code[BUFFER_SIZE];
+    char broken_token[BUFFER_SIZE];
+    size_t broken_token_len;
+    size_t broken_token_mark;
     struct definitions_t *defs;
     struct simulation_t *sim;
+    void *state;
 };
 
 
 struct tokenizer_t {
     void *state;
     vcd_token tok;
+    size_t line_num;
     struct parser_t parser;
 };
 
@@ -128,8 +132,10 @@ init_tokenizer( struct tokenizer_t *tokenizer,
 {
     tokenizer->state = NULL;
     tokenizer->tok = err_vcd_token;
+    tokenizer->line_num = 0;
     tokenizer->parser.state = NULL;
     tokenizer->parser.identifier_code[0] = '\0';
+    tokenizer->parser.broken_token_len = 0;
     tokenizer->parser.defs = defs;
     tokenizer->parser.sim = sim;
 }
@@ -362,9 +368,12 @@ print_value_change( struct simulation_t *sim,
 {
     /* mark indicates the end of the value and there is a space
        delimiter between the value and symbol name for bit vector changes. */
+    assert( last >= mark );
     size_t len = last - mark;
-    if( buffer[mark] == ' ' ) --len;
-    assert( len > 0 );
+    if( buffer[mark] == ' ' ) {
+        assert( len >= 1 );
+        --len;
+    }
     signal_buf *timeline = find_timeline(
         sim->map, &buffer[last - len], len);
     if( !timeline ) return;
@@ -408,9 +417,29 @@ print_value_change( struct simulation_t *sim,
 */
 static bool
 push_token( struct parser_t *parser, vcd_token token, const char *buffer,
-    size_t start, size_t last, size_t mark, bool broken )
+    size_t start, size_t last, size_t mark, bool broken, size_t line_num )
 {
     void *trans = parser->state;
+
+    /* Tokens which are broken over two input buffers must be
+       reconstructed in a single linear block first. */
+    if( broken ) {
+        memcpy(&parser->broken_token[parser->broken_token_len],
+            &buffer[start], last - start);
+        parser->broken_token_len += last - start;
+        parser->broken_token_mark = mark ? mark - start : 0;
+        return false;
+
+    } else if( parser->broken_token_len > 0 ) {
+        memcpy(&parser->broken_token[parser->broken_token_len],
+            &buffer[start], last - start);
+        buffer = parser->broken_token;
+        mark = mark ? mark - start : parser->broken_token_mark;
+        last = parser->broken_token_len + (last - start);
+        start = 0;
+        parser->broken_token_len = 0;
+    }
+
     if( trans != NULL ) goto *trans; else goto value_change_dump_definitions;
 
 value_change_dump_definitions:
@@ -584,7 +613,7 @@ advancePointer:
 
  error:
     /* XXX */
-    fprintf(stderr, "error: unexpected token %d\n", token);
+    fprintf(stderr, "vcd:%ld: error: unexpected token %d\n", line_num, token);
 #if 0
     printf("/* [%d:%ld,%ld:%d] ", token, start, last, broken);
     fwrite(&buffer[start], 1, last - start, stdout);
@@ -606,14 +635,21 @@ size_t tokenize_header_and_definitions( struct tokenizer_t *tokenizer,
 
 advancePointer:
     last = ptr - buffer;
-    switch( last >= buffer_length ? '\0' : *ptr ) {
+    /* _ptr_ and _last_ point to the next character available for tokenization,
+       which is one past the end of the last token and one less than the number
+       of characters in the buffer (base at zero). */
+    switch( last >= (buffer_length - 1) ? '\0' : *ptr ) {
     case '\0':
         if( last - first > 0 ) {
-            push_token(&tokenizer->parser, tokenizer->tok, buffer, first, last, mark, true);
+            push_token(&tokenizer->parser,
+                tokenizer->tok, buffer, first, last, mark, true,
+                tokenizer->line_num);
             first = last;
         }
         tokenizer->state = trans;
-        return last;
+        return last + 1;
+    case '\n':
+        ++tokenizer->line_num;
     }
     ++ptr;
     goto *trans;
@@ -630,7 +666,8 @@ token:
     last = ptr - buffer;
     if( last - first > 0 ) {
         if( push_token(&tokenizer->parser, tokenizer->tok,
-                buffer, first, last, mark, false) ) {
+                buffer, first, last, mark, false,
+                tokenizer->line_num) ) {
             return last;
         }
         first = last;
@@ -1045,7 +1082,7 @@ simulation_time_next:
 
 scalar_value:
     /* We are bundling the name of the variable inside the token here. */
-    if( !isspace(*ptr) ) {
+    if( !isspace(*ptr) ) { // XXX 33 to 126?
         mark = ptr - buffer;
         tokenizer->tok = value_change_bit_vcd_token;
         advance(scalar_value_identifier);
