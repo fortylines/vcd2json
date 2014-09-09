@@ -90,6 +90,7 @@ struct parser_t {
 struct tokenizer_t {
     void *state;
     vcd_token tok;
+    vcd_token last_significant_tok;
     size_t line_num;
     struct parser_t parser;
 };
@@ -132,6 +133,7 @@ init_tokenizer( struct tokenizer_t *tokenizer,
 {
     tokenizer->state = NULL;
     tokenizer->tok = err_vcd_token;
+    tokenizer->last_significant_tok = err_vcd_token;
     tokenizer->line_num = 0;
     tokenizer->parser.state = NULL;
     tokenizer->parser.identifier_code[0] = '\0';
@@ -421,20 +423,25 @@ push_token( struct parser_t *parser, vcd_token token, const char *buffer,
 {
     void *trans = parser->state;
 
+#if 0
+    printf("%ld: token %d (%ld,%ld,%ld) %s\n",
+        line_num, token, start, mark, last, broken ? " is broken" : "");
+#endif
+
     /* Tokens which are broken over two input buffers must be
        reconstructed in a single linear block first. */
     if( broken ) {
         memcpy(&parser->broken_token[parser->broken_token_len],
             &buffer[start], last - start);
         parser->broken_token_len += last - start;
-        parser->broken_token_mark = mark ? mark - start : 0;
+        parser->broken_token_mark = mark - start;
         return false;
 
     } else if( parser->broken_token_len > 0 ) {
         memcpy(&parser->broken_token[parser->broken_token_len],
             &buffer[start], last - start);
         buffer = parser->broken_token;
-        mark = mark ? mark - start : parser->broken_token_mark;
+        mark = mark > start ? mark - start : parser->broken_token_mark;
         last = parser->broken_token_len + (last - start);
         start = 0;
         parser->broken_token_len = 0;
@@ -641,10 +648,13 @@ advancePointer:
     switch( last >= (buffer_length - 1) ? '\0' : *ptr ) {
     case '\0':
         if( last - first > 0 ) {
+            if( tokenizer->tok != whitespace_vcd_token ) {
+                tokenizer->last_significant_tok = tokenizer->tok;
+            }
             push_token(&tokenizer->parser,
                 tokenizer->tok, buffer, first, last, mark, true,
                 tokenizer->line_num);
-            first = last;
+            first = mark = last;
         }
         tokenizer->state = trans;
         return last + 1;
@@ -665,36 +675,59 @@ error:
 token:
     last = ptr - buffer;
     if( last - first > 0 ) {
+        if( tokenizer->tok != whitespace_vcd_token ) {
+            tokenizer->last_significant_tok = tokenizer->tok;
+        }
         if( push_token(&tokenizer->parser, tokenizer->tok,
                 buffer, first, last, mark, false,
                 tokenizer->line_num) ) {
             return last;
         }
-        first = last;
+        first = mark = last;
     }
     if( isspace(*ptr) ) {
         tokenizer->tok = whitespace_vcd_token;
         advance(whitespace);
     }
     tokenizer->tok = data_vcd_token;
-    switch( *ptr ) {
-    case '$':
-        advance(keyword);
-    case '#':
-        advance(simulation_time);
-    case '0':
-    case '1':
-    case 'x':
-    case 'X':
-    case 'z':
-    case 'Z':
-        advance(scalar_value);
-    case 'b':
-    case 'B':
-        advance(vector_binary_value);
-    case 'r':
-    case 'R':
-        advance(vector_real_value);
+    switch( tokenizer->last_significant_tok ) {
+        /* simulation keywords */
+    case dumpall_vcd_token:
+    case dumpoff_vcd_token:
+    case dumpon_vcd_token:
+    case dumpvars_vcd_token:
+    case sim_time_vcd_token:
+    case value_change_bit_vcd_token:
+    case value_change_binary_vcd_token:
+    case value_change_real_vcd_token:
+        switch( *ptr ) {
+        case '$':
+            advance(keyword);
+        case '#':
+            advance(simulation_time);
+        case '0':
+        case '1':
+        case 'x':
+        case 'X':
+        case 'z':
+        case 'Z':
+            advance(scalar_value);
+        case 'b':
+        case 'B':
+            advance(vector_binary_value);
+        case 'r':
+        case 'R':
+            advance(vector_real_value);
+        }
+    default:
+        /* token might be categorized as vector_binary_value (instead of
+           data_vcd_token) if it happens to be "b0" for example. */
+        switch( *ptr ) {
+        case '$':
+            advance(keyword);
+        case '#':
+            advance(simulation_time);
+        }
     }
     advance(data);
 
