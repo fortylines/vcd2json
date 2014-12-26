@@ -33,6 +33,13 @@ typedef struct _write_string_stream_t {
 } write_string_stream_t;
 
 
+typedef struct {
+    PyObject_HEAD
+    struct trace_filter_t trace;
+    write_string_stream_t write_stream;
+} PyVCDTrace;
+
+
 static void
 write_string_stream_append( void* ptr, const char *buffer, size_t len )
 {
@@ -48,6 +55,75 @@ write_string_stream_append( void* ptr, const char *buffer, size_t len )
             stream->buffer = newstr;
         }
     }
+}
+
+
+static int
+PyVCDTrace_init(PyVCDTrace *self, PyObject *args, PyObject *kwds)
+{
+    Py_ssize_t i;
+    PyObject *variables;
+    unsigned long start_time, end_time, resolution;
+
+    if( !PyArg_ParseTuple(args, "Okkk", &variables,
+            &start_time, &end_time, &resolution) ) {
+        return 1;
+    }
+
+    self->write_stream.write_index = 0;
+    self->write_stream.buffer = NULL;
+    trace_filter_init(&self->trace, start_time, end_time, resolution,
+        write_string_stream_append, &self->write_stream);
+
+    for( i = 0; i < PyList_Size(variables); ++i ) {
+        PyObject *item = PyList_GetItem(variables, 0);
+        char *name = PyString_AsString(item);
+        if( name ) {
+            self->trace.map.head = insert_signal(self->trace.map.head, name);
+        }
+    }
+
+    return 0;
+}
+
+static void
+PyVCDTrace_dealloc(PyObject *obj)
+{
+    PyVCDTrace *self = (PyVCDTrace*)obj;
+    destroy_signal_map(&self->trace.map);
+    PyMem_DEL(self);
+}
+
+
+static PyObject *
+PyVCDTrace_write(PyVCDTrace *self, PyObject *args)
+{
+    PyObject *arg1 = NULL;
+    Py_buffer buffer;
+
+    if( !PyArg_ParseTuple(args, "O", &arg1) ) {
+        return 0;
+    }
+    if( PyObject_GetBuffer(arg1, &buffer, PyBUF_SIMPLE) < 0 ) {
+        return 0;
+    }
+
+    size_t bytes_used = trace_filter_write(
+        &self->trace, buffer.buf, buffer.len);
+
+    PyBuffer_Release(&buffer);
+    return PyInt_FromSize_t(bytes_used);
+}
+
+static PyObject *
+PyVCDTrace_str(PyObject *obj)
+{
+    PyVCDTrace *self = (PyVCDTrace*)obj;
+    trace_filter_flush(&self->trace);
+
+    if( self->write_stream.buffer )
+        return self->write_stream.buffer;
+    return PyString_FromString("");
 }
 
 
@@ -139,10 +215,64 @@ static PyMethodDef VCDMethods[] = {
     {NULL, NULL, 0, NULL}        /* Sentinel */
 };
 
+static PyMethodDef PyVCDTrace_methods[] = {
+    {"write", (PyCFunction)PyVCDTrace_write, METH_VARARGS,
+     "Write a chuck of VCD bytes into the trace filter."
+    },
+    {NULL}
+};
+
+static PyTypeObject PyVCDTrace_t = {
+    PyObject_HEAD_INIT(NULL)
+    0,                      /* ob_size */
+    "vcd.Trace",            /* tp_name */
+    sizeof(PyVCDTrace),     /* tp_basicsize */
+    0,                      /* tp_itemsize    */
+    PyVCDTrace_dealloc,     /* tp_dealloc     */
+    0,                      /* tp_print       */
+    0,                      /* tp_getattr     */
+    0,                      /* tp_setattr     */
+    0,                      /* tp_compare     */
+    0,                      /* tp_repr        */
+    0,                      /* tp_as_number   */
+    0,                      /* tp_as_sequence */
+    0,                      /* tp_as_mapping  */
+    0,                      /* tp_hash        */
+    0,                      /* tp_call        */
+    PyVCDTrace_str,         /* tp_str         */
+    0,                      /* tp_getattro    */
+    0,                      /* tp_setattro    */
+    0,                      /* tp_as_buffer   */
+    Py_TPFLAGS_DEFAULT,     /* tp_flags       */
+    "VCD Trace.",           /* tp_doc         */
+    0,                      /* tp_traverse    */
+    0,                      /* tp_clear          */
+    0,                      /* tp_richcompare    */
+    0,                      /* tp_weaklistoffset */
+    0,                      /* tp_iter           */
+    0,                      /* tp_iternext       */
+    PyVCDTrace_methods,     /* tp_methods        */
+    0,                      /* tp_members        */
+    0,                      /* tp_getset         */
+    0,                      /* tp_base           */
+    0,                      /* tp_dict           */
+    0,                      /* tp_descr_get      */
+    0,                      /* tp_descr_set      */
+    0,                      /* tp_dictoffset     */
+    (initproc)PyVCDTrace_init, /* tp_init         */
+};
+
 
 PyMODINIT_FUNC
 initvcd(void)
 {
+    PyVCDTrace_t.tp_new = PyType_GenericNew;
+    if (PyType_Ready(&PyVCDTrace_t) < 0)
+        return;
+
     PyObject *m = Py_InitModule("vcd", VCDMethods);
     if( m == NULL ) return;
+
+    Py_INCREF(&PyVCDTrace_t);
+    PyModule_AddObject(m, "Trace", (PyObject *)&PyVCDTrace_t);
 }

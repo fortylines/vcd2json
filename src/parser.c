@@ -29,73 +29,6 @@
 
 #define NAMESPACE_SEP        '/'
 
-typedef enum {
-    err_vcd_token = 0,
-    whitespace_vcd_token,
-    keyword_vcd_token,
-    /* declaration keywords */
-    comment_vcd_token,
-    date_vcd_token,
-    enddefinitions_vcd_token,
-    scope_vcd_token,
-    timescale_vcd_token,
-    upscope_vcd_token,
-    var_vcd_token,
-    version_vcd_token,  /* 10 */
-    end_vcd_token,
-    data_vcd_token,
-    /* simulation keywords */
-    dumpall_vcd_token,
-    dumpoff_vcd_token,
-    dumpon_vcd_token,
-    dumpvars_vcd_token,
-    sim_time_vcd_token,
-    value_change_bit_vcd_token,   /* 18 */
-    value_change_binary_vcd_token,
-    value_change_real_vcd_token
-} vcd_token;
-
-
-struct definitions_t {
-    signal_map *map;
-    bool enter_scope;
-    bool enter_field;
-    vcd_print_callback print;
-    void *obj;
-    int scope_depth;
-    char scope_prefix[FILENAME_MAX];
-};
-
-
-struct simulation_t {
-    const signal_map *map;    /* identifier codes we are interested in. */
-    size_t current_timestamp;
-    size_t start_time;         /* [start_time, end_time[ period we are   */
-    size_t end_time;           /* interested in. */
-    size_t resolution;
-};
-
-
-struct parser_t {
-    char identifier_code[BUFFER_SIZE];
-    char broken_token[BUFFER_SIZE];
-    size_t broken_token_len;
-    size_t broken_token_mark;
-    struct definitions_t *defs;
-    struct simulation_t *sim;
-    void *state;
-};
-
-
-struct tokenizer_t {
-    void *state;
-    vcd_token tok;
-    vcd_token last_significant_tok;
-    size_t line_num;
-    struct parser_t parser;
-};
-
-
 static int
 append_to_prefix( char *scope_prefix, const char *src, size_t len )
 {
@@ -1264,3 +1197,44 @@ void filter_value_changes( FILE *from, signal_map *map,
     }
     print(obj, "}\n", 2);
 }
+
+
+void trace_filter_init( struct trace_filter_t *trace,
+    size_t start_time, size_t end_time, size_t resolution,
+    vcd_print_callback print, void *obj )
+{
+    init_definitions(&trace->defs, &trace->map, print, obj);
+    init_simulation(&trace->sim, &trace->map, start_time, end_time, resolution);
+    init_tokenizer(&trace->tokenizer, &trace->defs, &trace->sim);
+    init_signal_map(&trace->map);
+
+    print(obj, "{\n", 2);
+}
+
+
+void
+trace_filter_flush( struct trace_filter_t *trace )
+{
+    signal_buf *curr = trace->map.head;
+    while( curr ) {
+        /* Always append comma. First one is to close header information. */
+        trace->defs.print(trace->defs.obj, ",\n\"", 3);
+        trace->defs.print(trace->defs.obj, curr->name, strlen(curr->name));
+        trace->defs.print(trace->defs.obj, "\": [\n", 5);
+        trace->defs.print(trace->defs.obj, curr->text, strlen(curr->text));
+        trace->defs.print(trace->defs.obj, "\n]", 2);
+        curr = curr->next;
+    }
+    trace->defs.print(trace->defs.obj, "}\n", 2);
+    destroy_signal_map(&trace->map);
+}
+
+
+size_t
+trace_filter_write( struct trace_filter_t *trace,
+    const char *buffer, size_t buffer_length )
+{
+    return tokenize_header_and_definitions(
+        &trace->tokenizer, buffer, buffer_length);
+}
+

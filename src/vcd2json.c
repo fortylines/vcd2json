@@ -35,13 +35,15 @@ stdout_print( void* obj, const char *buffer, size_t len )
 
 int main( int argc, char *argv[] )
 {
-    size_t resolution = 1;
-    size_t start_time = 0;
     size_t end_time = 0;
-    signal_map map;
+    size_t start_time = 0;
+    size_t resolution = 1;
+    size_t bytes_read = 1;
+    struct trace_filter_t trace;
+    char buffer[BUFFER_SIZE];
     char input_path[FILENAME_MAX];
 
-    init_signal_map(&map);
+    trace_filter_init(&trace, 0, 0, 1, stdout_print, NULL);
 
     int argi = 1;
     while( argi < argc ) {
@@ -68,7 +70,7 @@ int main( int argc, char *argv[] )
                     "error: missing symbol argument after %s", argv[argi - 1]);
                 return 1;
             }
-            map.head = insert_signal(map.head, argv[argi++]);
+            trace.map.head = insert_signal(trace.map.head, argv[argi++]);
         } else if( strncmp(argv[argi], "-s", 2) == 0
             || strncmp(argv[argi], "--start", 7) == 0 ) {
             ++argi;
@@ -117,16 +119,24 @@ int main( int argc, char *argv[] )
     fprintf(stderr,
         "(timestamp, value) in [%ld, %ld[ with resolution %ld for\n",
         start_time, end_time, resolution);
-    signal_buf *curr = map.head;
+    signal_buf *curr = trace.map.head;
     while( curr ) {
         fprintf(stderr, "\t%s\n", curr->name);
         curr = curr->next;
     }
 #endif
 
-    filter_value_changes(from, &map, start_time, end_time, resolution,
-        stdout_print, NULL);
+    trace.sim.start_time = start_time;
+    trace.sim.end_time = end_time;
+    trace.sim.resolution = resolution;
 
-    destroy_signal_map(&map);
+    while( bytes_read > 0 ) {
+        bytes_read = fread(buffer, 1, BUFFER_SIZE, from);
+        if( trace_filter_write(&trace, buffer, bytes_read) != bytes_read ){
+            break;
+        }
+    }
+
+    trace_filter_flush(&trace);
     return 0;
 }

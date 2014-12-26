@@ -25,6 +25,7 @@
 -include $(buildTop)/share/dws/prefix.mk
 
 srcDir        ?= .
+objDir        ?= .
 installTop    ?= $(VIRTUAL_ENV)
 binDir        ?= $(installTop)/bin
 includeDir    ?= $(installTop)/include
@@ -39,10 +40,11 @@ dynlibs       := libvcd$(dylSuffix)
 
 CPPFLAGS      += -I$(srcDir)/include -D__VCD2JSON_VERSION__=\"$(version)\"
 CFLAGS        += -std=c99 -g
-LDFLAGS       += -L.
 LDLIBS        := -lvcd
 
-vpath %.c $(srcDir)/src
+ifeq (,$(findstring -L$(objDir), $(LDFLAGS)))
+LDFLAGS       := -L$(objDir) $(LDFLAGS)
+endif
 
 ifneq ($(filter Darwin,$(shell uname)),)
 dylSuffix       := .dylib
@@ -52,7 +54,10 @@ dylSuffix       := .so
 SHAREDLIBFLAGS  = -pthread -shared -Wl,-soname,$@
 endif
 
-all: vcd2json libvcd$(dylSuffix)
+vpath %.c $(srcDir)/src
+
+
+all: vcd2json libvcd$(dylSuffix) _vcd.so
 
 # NOTE: The python lib needs to be installed after libvcd.so since
 # we use LD_LIBRARY_PATH to find that library in setup.py.
@@ -66,6 +71,9 @@ install: vcd2json libvcd$(dylSuffix)
 	install -p -m 755 libvcd$(dylSuffix) $(DESTDIR)$(libDir)
 	cd $(srcDir)/src && $(PYTHON) setup.py build -b $(CURDIR)/build \
             install --prefix=$(DESTDIR)$(installTop)
+
+_vcd.so: wrapper.c
+	cd $(srcDir)/src && $(PYTHON) setup.py build -b $(CURDIR)/build
 
 vcd2json: vcd2json.c libvcd$(dylSuffix)
 	$(LINK.c) $(filter-out %.h %.hh %.hpp %.ipp %.tcc %.def %$(dylSuffix),$^) $(LOADLIBES) $(LDLIBS) -o $@
