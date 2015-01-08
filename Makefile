@@ -83,3 +83,6 @@ libvcd$(dylSuffix): parser.o buf.o
 
 clean:
 	rm -rf vcd2json libvcd$(dylSuffix) *.o *.d *~  *.dSYM $(CURDIR)/build
+
+
+-include $(buildTop)/share/dws/suffix.mk
