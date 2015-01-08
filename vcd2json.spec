@@ -1,6 +1,6 @@
 %define python_sitearch %(%{__python} -c "from distutils.sysconfig import get_python_lib; print get_python_lib(1)")
 
-Summary: Library to extract information from Value Change Dump files
+Summary: Utility to extract information from Value Change Dump files
 Name: vcd2json
 Version: 0.2
 Release: 0
@@ -55,8 +55,11 @@ make install DESTDIR=%{buildroot}
 %files python
 %defattr(-,root,root,-)
 %{python_sitearch}/vcd.so
-%{python_sitearch}/vcd-*.egg-info
+%{python_sitearch}/vcd2json-*.egg-info
 
 %changelog
+* Wed Jan 7 2015 Sebastien Mirolo <smirolo@fortylines.com> - 0.2-0
+- Refactor into a vcd2json utility
+
 * Sun Jan 6 2013 Sebastien Mirolo <smirolo@fortylines.com> - 0.1-0
 - Initial RPM release
