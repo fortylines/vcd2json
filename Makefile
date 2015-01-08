@@ -57,12 +57,12 @@ endif
 vpath %.c $(srcDir)/src
 
 
-all: vcd2json libvcd$(dylSuffix) _vcd.so
+all:: vcd2json libvcd$(dylSuffix) _vcd.so
 
 # NOTE: The python lib needs to be installed after libvcd.so since
 # we use LD_LIBRARY_PATH to find that library in setup.py.
 # XXX Does not work when running rpmbuild and lib is BUILDROOT/.../usr/lib64
-install: vcd2json libvcd$(dylSuffix)
+install:: vcd2json libvcd$(dylSuffix)
 	install -d $(DESTDIR)$(binDir)
 	install -s -p -m 755 vcd2json $(DESTDIR)$(binDir)
 	install -d $(DESTDIR)$(includeDir)
@@ -81,7 +81,7 @@ vcd2json: vcd2json.c libvcd$(dylSuffix)
 libvcd$(dylSuffix): parser.o buf.o
 	$(LINK.o) $(SHAREDLIBFLAGS) $(filter-out %.h %.hh %.hpp %.ipp %.tcc %.def,$^) -o $@
 
-clean:
+clean::
 	rm -rf vcd2json libvcd$(dylSuffix) *.o *.d *~  *.dSYM $(CURDIR)/build
 
 
