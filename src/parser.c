@@ -155,13 +155,14 @@ print_timestamp_and_value( signal_buf *timeline,
 
 
 static bool is_data_token( vcd_token tok ) {
-    return tok == data_vcd_token
-        | tok == sim_time_vcd_token
-        | tok == keyword_vcd_token
-        | tok == value_change_bit_vcd_token
-        | tok == value_change_binary_vcd_token
-        | tok == value_change_real_vcd_token;
+    return (tok == data_vcd_token)
+        | (tok == sim_time_vcd_token)
+        | (tok == keyword_vcd_token)
+        | (tok == value_change_bit_vcd_token)
+        | (tok == value_change_binary_vcd_token)
+        | (tok == value_change_real_vcd_token);
 }
+
 
 static void
 escape_identifier_code( const char *ident,
@@ -174,7 +175,7 @@ escape_identifier_code( const char *ident,
            "identifier code is a code composed of the printable characters
            which are in the ASCII character set from ! to ~ (decimal 33
            to 126)" and escaped characters from http://json.org.  */
-        if( *p == '"' | *p == '\\' | *p == '/' ) print(obj, "\\", 1);
+        if( (*p == '"') | (*p == '\\') | (*p == '/') ) print(obj, "\\", 1);
         print(obj, p++, 1);
     }
     print(obj, "\"", 1);
@@ -318,8 +319,8 @@ print_value_change( struct simulation_t *sim,
        ^              ^              ^
        change_record  enter_period   current_time
     */
-    if( sim->start_time <= sim->current_timestamp
-        & sim->current_timestamp < sim->end_time  ) {
+    if( (sim->start_time <= sim->current_timestamp)
+        & (sim->current_timestamp < sim->end_time)  ) {
         if( timeline->not_first_record ) {
             // XXX Inefficient
             strncat(timeline->text, ",\n", BUFFER_SIZE);
@@ -1035,11 +1036,11 @@ data:
     goto token;
 
 simulation_time:
-    if( *ptr >= '0' & *ptr <= '9' ) advance(simulation_time_next);
+    if( (*ptr >= '0') & (*ptr <= '9') ) advance(simulation_time_next);
     goto data;
 
 simulation_time_next:
-    if( *ptr >= '0' & *ptr <= '9' ) advance(simulation_time_next);
+    if( (*ptr >= '0') & (*ptr <= '9') ) advance(simulation_time_next);
     if( isspace(*ptr) ) {
         tokenizer->tok = sim_time_vcd_token;
         goto token;
@@ -1095,7 +1096,7 @@ vector_binary_value_identifier:
 
 vector_real_value:
     /* XXX no check of compliance with a float-formatted value here. */
-    if( *ptr >= '0' & *ptr <= '9' ) advance(vector_real_value_next);
+    if( (*ptr >= '0') & (*ptr <= '9') ) advance(vector_real_value_next);
     goto data;
 
 vector_real_value_next:

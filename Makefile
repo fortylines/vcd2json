@@ -39,7 +39,7 @@ bins          := vcd2json
 dynlibs       := libvcd$(dylSuffix)
 
 CPPFLAGS      += -I$(srcDir)/include -D__VCD2JSON_VERSION__=\"$(version)\"
-CFLAGS        += -std=c99 -g
+CFLAGS        += -std=c99 -g -fPIC
 LDLIBS        := -lvcd
 
 ifeq (,$(findstring -L$(objDir), $(LDFLAGS)))
