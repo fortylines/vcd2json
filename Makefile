@@ -66,7 +66,7 @@ install:: vcd2json libvcd$(dylSuffix)
 	install -d $(DESTDIR)$(binDir)
 	install -s -p -m 755 vcd2json $(DESTDIR)$(binDir)
 	install -d $(DESTDIR)$(includeDir)
-	sed -e 's/#define __VCD2JSON_VERSION__ "(.*)"/#define __VCD2JSON_VERSION__ "$(version)"/' $(srcDir)/include/libvcd.h > $(includeDir)/libvcd.h
+	sed -e 's/#define __VCD2JSON_VERSION__ "(.*)"/#define __VCD2JSON_VERSION__ "$(version)"/' $(srcDir)/include/libvcd.h > $(DESTDIR)$(includeDir)/libvcd.h
 	install -d $(DESTDIR)$(libDir)
 	install -p -m 755 libvcd$(dylSuffix) $(DESTDIR)$(libDir)
 	cd $(srcDir)/src && $(PYTHON) setup.py build -b $(CURDIR)/build \
