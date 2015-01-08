@@ -1,0 +1,19 @@
+<?xml version="1.0" ?>
+<projects>
+  <project name="vc2json">
+    <title>Extract information from a VCD file</title>
+    <description>
+A utility to extract variables from a Value Change Dump (VCD) for a specific
+time frame. This utility prints a JSON formatted output.
+    </description>
+    <maintainer>
+      <personname>Sebastien Mirolo</personname>
+      <email>smirolo@fortylines.com</email>
+    </maintainer>
+    <repository>
+      <dep name="gcc">
+        <bin>gcc</bin>
+      </dep>
+    </repository>
+  </project>
+</projects>

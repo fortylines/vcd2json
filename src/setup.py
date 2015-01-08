@@ -43,7 +43,13 @@ _vcd = Extension('vcd',
                  library_dirs = [ vcd_lib_dir ],
                  sources = ['wrapper.c'])
 
-setup(name='vcd',
+setup(name='vcd2json',
       version=__version__,
-      description='This is a wrapper for libvcd',
-      ext_modules=[_vcd])
+      author='Sebastien Mirolo',
+      author_email='smirolo@fortylines.com',
+      ext_modules=[_vcd],
+      url='https://github.com/fortylines/vcd2json/',
+      download_url='https://github.com/fortylines/vcd2json/tarball/%s'
+          % __version__,
+      license='BSD',
+      description='This is a wrapper for libvcd')
