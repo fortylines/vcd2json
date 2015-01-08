@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2014, Fortylines LLC
+/* Copyright (c) 2015, Sebastien Mirolo
    All rights reserved.
 
    Redistribution and use in source and binary forms, with or without
@@ -51,7 +51,7 @@ int main( int argc, char *argv[] )
             || strncmp(argv[argi], "--help", 6) == 0 ) {
             printf("%s [options] vcdfile\n", argv[0]);
             printf("version %s\n", __VCD2JSON_VERSION__);
-            printf("Copyright (c) 2012-2014, Fortylines LLC\n\n");
+            printf("Copyright (c) 2015, Sebastien Mirolo\n\n");
             printf("-n, --name str        "\
                 "variable name to include in json output\n");
             printf("-s, --start int       "\
