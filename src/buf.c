@@ -36,7 +36,8 @@ signal_buf *insert_signal( signal_buf *head, char *name ) {
     }
     signal_buf *node = malloc(sizeof(signal_buf));
     memset(node, 0, sizeof(signal_buf));
-    node->name = strdup(name);
+    node->name = malloc(strlen(name) + 1);
+    strcpy(node->name, name);
     node->next = curr;
     if( prev ) {
         prev->next = node;
