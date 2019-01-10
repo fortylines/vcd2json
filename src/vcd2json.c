@@ -1,4 +1,4 @@
-/* Copyright (c) 2015, Sebastien Mirolo
+/* Copyright (c) 2019, Sebastien Mirolo
    All rights reserved.
 
    Redistribution and use in source and binary forms, with or without
@@ -43,6 +43,7 @@ int main( int argc, char *argv[] )
     char buffer[BUFFER_SIZE];
     char input_path[FILENAME_MAX];
 
+    input_path[0] = 0;
     trace_filter_init(&trace, 0, 0, 1, stdout_print, NULL);
 
     int argi = 1;
@@ -109,7 +110,7 @@ int main( int argc, char *argv[] )
         }
     }
 
-    FILE *from = fopen(input_path, "r");
+    FILE *from = strlen(input_path) > 0 ? fopen(input_path, "r") : stdin;
     if( !from ) {
         fprintf(stderr, "error: unable to open %s\n", argv[1]);
         return 1;

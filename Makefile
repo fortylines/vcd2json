@@ -1,4 +1,4 @@
-# Copyright (c) 2015, Sebastien Mirolo
+# Copyright (c) 2019, Sebastien Mirolo
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -57,7 +57,7 @@ endif
 vpath %.c $(srcDir)/src
 
 
-all:: vcd2json libvcd$(dylSuffix) _vcd.so
+all:: vcd2json libvcd$(dylSuffix)
 
 # NOTE: The python lib needs to be installed after libvcd.so since
 # we use LD_LIBRARY_PATH to find that library in setup.py.
@@ -69,8 +69,6 @@ install:: vcd2json libvcd$(dylSuffix)
 	sed -e 's/#define __VCD2JSON_VERSION__ "(.*)"/#define __VCD2JSON_VERSION__ "$(version)"/' $(srcDir)/include/libvcd.h > $(DESTDIR)$(includeDir)/libvcd.h
 	install -d $(DESTDIR)$(libDir)
 	install -p -m 755 libvcd$(dylSuffix) $(DESTDIR)$(libDir)
-	cd $(srcDir)/src && $(PYTHON) setup.py build -b $(CURDIR)/build \
-            install --prefix=$(DESTDIR)$(installTop)
 
 _vcd.so: wrapper.c
 	cd $(srcDir)/src && $(PYTHON) setup.py build -b $(CURDIR)/build
